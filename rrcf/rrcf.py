@@ -1222,8 +1222,9 @@ class Forest:
         self.kwargs_tree = kwargs
 
         for _ in range(num_trees):
-            tree_data = data[np.random.choice(self.dataset_size, size=self.tree_size, replace=False)]
-            tree = RCTree(tree_data, **self.kwargs_tree)
+            index_data = np.random.choice(self.dataset_size, size=self.tree_size, replace=False)
+            tree_data = data[index_data]
+            tree = RCTree(tree_data, index_data ,**self.kwargs_tree)
             self.forest.append(tree)
 
     def mean_codisp(self, point):
@@ -1257,14 +1258,13 @@ class Forest:
         dim_codisp = np.zeros([self.dataset_dim ],dtype=float)
         ocurrences = 0
         for tree in self.forest:
-            for leaf in tree.leaves:
-                if point in tree.leaves:
-                    codisp,cutdim = tree.codisp_with_cut_dimension(leaf)
-                
-                    dim_codisp[cutdim] += codisp 
-                    ocurrences += 1
+            if point in tree.leaves:
+                codisp,cutdim = tree.codisp_with_cut_dimension(point)
+            
+                dim_codisp[cutdim] += codisp 
+                ocurrences += 1
 
-        return dim_codisp/ocurrences if ocurrences == 0 else dim_codisp
+        return dim_codisp/ocurrences if ocurrences != 0 else dim_codisp
 
 
     def add_point(self, point):
@@ -1281,13 +1281,4 @@ class Forest:
                     tree.forget_point(tree.leaves[leaf])
                     tree.insert_point(point, index_label=tree.leaves[leaf])
     
-    def _create_forest(self, num_trees, tree_size, data):
-        """
-        Creates a forest of RCTree objects.
-        Inputs:
-            - num_trees: the number of trees in the forest
-            - tree_size: the size of each tree
-            - data: the dataset to construct the forest from
-        Returns:
-            - forest: a list of RCTree objects
-        """
+
