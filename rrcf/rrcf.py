@@ -1174,3 +1174,120 @@ class Leaf:
 
     def __repr__(self):
         return "Leaf({0})".format(self.i)
+
+
+
+class Forest:
+    """
+    A forest of `RCTree` objects for anomaly detection.
+
+    Parameters
+    ----------
+    num_trees : int
+        The number of trees in the forest.
+    tree_size : int
+        The size of each tree.
+    data : numpy.ndarray
+        The dataset to construct the forest from.
+    **kwargs : dict
+        Keyword arguments to pass to the `RCTree` constructor.
+
+    Attributes:
+    -----------
+    forest: List of RCTree objects
+    dataset_size: Number of points in dataset
+    dataset_dim: Dimension of dataset
+    tree_size: Number of points in each tree
+    kwargs_tree: Keyword arguments to pass to RCTree constructor
+
+    Methods:
+    --------
+    mean_codisp: Computes the mean of the co-dispersion values for each point in the dataset.
+    mean_codisp_dimensions: Computes the mean of the co-dispersion values for each point in the dataset by cut dimension.
+
+    """
+    def __init__(self, num_trees, tree_size, data, **kwargs):
+        """
+        Constructs a forest of RCTree objects.
+        Inputs:
+            - num_trees: the number of trees in the forest
+            - tree_size: the size of each tree
+            - data: the dataset to construct the forest from
+            - **kwargs: keyword arguments to pass to the RCTree constructor
+        """
+        self.forest = []
+        self.dataset_size = data.shape[0]
+        self.dataset_dim = data.shape[1]
+        self.tree_size = tree_size
+        self.kwargs_tree = kwargs
+
+        for _ in range(num_trees):
+            tree_data = data[np.random.choice(self.dataset_size, size=self.tree_size, replace=False)]
+            tree = RCTree(tree_data, **self.kwargs_tree)
+            self.forest.append(tree)
+
+    def mean_codisp(self, point):
+        """
+        Calculates the average codispersion of the trees in the forest for a given point.
+        Inputs:
+            - point: the point to calculate the average codispersion for
+        Returns:
+            - mean_codisp: the average codispersion of the trees in the forest for the given point
+        """
+        codisps = []
+        for tree in self.forest:
+            if point in tree.leaves:
+                codisps.append(tree.codisp(point))
+        if len(codisps) == 0:
+            return 0
+        else:
+            return np.mean(codisps)
+    
+    def mean_codisp_dimension(self, point):
+        
+        """
+        Calculates the average codispersion of the trees in the forest for a given point computed the cut dimension.
+        Inputs:
+            - point: the point to calculate the average codispersion for
+        Returns:
+            - dim_codisp/ocurrences: a vector with the codispersion by cut dimension of the trees in the forest for the given point
+        """
+
+
+        dim_codisp = np.zeros([self.dataset_dim ],dtype=float)
+        ocurrences = 0
+        for tree in self.forest:
+            for leaf in tree.leaves:
+                if point in tree.leaves:
+                    codisp,cutdim = tree.codisp_with_cut_dimension(leaf)
+                
+                    dim_codisp[cutdim] += codisp 
+                    ocurrences += 1
+
+        return dim_codisp/ocurrences if ocurrences == 0 else dim_codisp
+
+
+    def add_point(self, point):
+        """
+        Adds a new point to the trees in the forest using reservoir-based random sampling.
+        Inputs:
+            - point: the new point to add to the trees
+        """
+        for tree in self.forest:
+            if len(tree.leaves) < self.dataset_size:
+                tree.insert_point(point)
+            else:
+                if leaf := np.random.randint(0, self.dataset_size) < len(tree.leaves):
+                    tree.forget_point(tree.leaves[leaf])
+                    tree.insert_point(point, index_label=tree.leaves[leaf])
+    
+    def _create_forest(self, num_trees, tree_size, data):
+        """
+        Creates a forest of RCTree objects.
+        Inputs:
+            - num_trees: the number of trees in the forest
+            - tree_size: the size of each tree
+            - data: the dataset to construct the forest from
+        Returns:
+            - forest: a list of RCTree objects
+        """
